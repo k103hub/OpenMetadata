@@ -742,8 +742,8 @@ public class UserResource extends EntityResource<User, UserRepository> {
     }
 
     if (createdUserRes != null) {
-      // Send Invite mail to user
-      sendInviteMailToUserForBasicAuth(uriInfo, user, create);
+      // 静默创建账号：API 创建用户时不发送欢迎/邀请邮件通知
+      // sendInviteMailToUserForBasicAuth(uriInfo, user, create);
 
       // Update response to remove auth fields
       decryptOrNullify(securityContext, (User) createdUserRes.getEntity());
