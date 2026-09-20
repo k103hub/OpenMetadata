@@ -1,10 +1,12 @@
 # OpenMetadata 定制适配说明（中文版）
 
-> 基于实际应用需求，对 OpenMetadata（OM）做了若干小适配。本文档记录各项适配的目的、默认行为、修改内容与当前状态，便于后续维护与升级对照。
+> 基于实际应用需求，对 OpenMetadata（OM）做了若干小适配。本文档分两部分：**第一部分：功能定制**（fork 代码改动：目的、默认行为、修改内容与当前状态，便于后续维护与升级对照）与**第二部分：Docker 部署说明**（生产全栈 compose）。
 
 ---
 
 ## 目录
+
+**第一部分：功能定制**
 
 | # | 适配项 | 状态 | 是否定制 |
 |---|--------|------|----------|
@@ -14,9 +16,15 @@
 | 4 | lifeCycle 更新不产生 VersionsHistory | 已满足 | 后续不再定制 |
 | 5 | DataQuality 失败后查看具体失败数据 | 已满足 | 后续不再定制 |
 
+**第二部分：Docker 部署**
+
+- Docker 部署（`docker/docker-compose-custom`），见文末
+
 ---
 
-## 1. 静默创建账号（API 创建用户不发欢迎邮件）
+## 第一部分：功能定制
+
+### 1. 静默创建账号（API 创建用户不发欢迎邮件）
 
 - **状态**：已完成（本次 fork 定制）
 - **默认行为**：通过 API 创建用户（`POST /api/v1/users`）时，会向用户 email 发送欢迎/邀请邮件。
@@ -27,7 +35,7 @@
 
 ---
 
-## 2. 禁止自助注册账号
+### 2. 禁止自助注册账号
 
 - **状态**：标准功能已满足，后续不再定制
 - **默认行为**：首页允许自助注册账号，无法保证与 eHR 系统完全一致。
@@ -39,7 +47,7 @@
 
 ---
 
-## 3. 修复 displayName 被覆盖
+### 3. 修复 displayName 被覆盖
 
 - **状态**：标准功能已满足，后续不再定制
 - **默认行为**：源系统中的表发生修改后，OM 再次同步时，手工修改的 Table 的 `displayName` 会被覆盖/删除。
@@ -50,7 +58,7 @@
 
 ---
 
-## 4. lifeCycle 更新不产生 VersionsHistory
+### 4. lifeCycle 更新不产生 VersionsHistory
 
 - **状态**：标准功能已按此完善，后续不再定制
 - **默认行为**：数据中台中的表每天会重建数据，即使“内容”不变，OM 也会因 `lifeCycle` 变化对应增加一个版本，导致版本历史被“污染”。
@@ -61,7 +69,7 @@
 
 ---
 
-## 5. DataQuality 失败后查看具体失败数据
+### 5. DataQuality 失败后查看具体失败数据
 
 - **状态**：标准功能已满足，后续不再定制（但仅显示 3 条 sample 数据）
 - **默认行为**：TestCase 失败后，不论选择 Rows 还是 Count 类型，均只返回数量；官方回复该能力仅 Collate SaaS 支持。
@@ -69,4 +77,62 @@
 - **实现位置**：
   - `openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TestCaseRepository.java`
   - 失败行样本扩展点 `FAILED_ROWS_SAMPLE_EXTENSION = "testCase.failedRowsSample"`；`addFailedRowsSample(...)` 校验列并写入失败行样本；`getSampleData(...)` 读取结果。
+
+---
+
+## 第二部分：Docker 部署（docker/docker-compose-custom）
+
+生产全栈部署 compose，**基于仓库 quickstart 模板**（`docker/docker-compose-quickstart/docker-compose.yml`）按《02-Casdoor与OpenMetadata认证集成.md》方式 A（custom-oidc + 授权码流）配置。
+
+### 目录结构
+
+```
+docker/docker-compose-custom/
+├── docker-compose.yml      # git 跟踪：完整生产 compose（密钥已剥离为 ${VAR} 引用）
+├── Dockerfile              # 本地构建含定制代码的 server 镜像（FROM 用 gcr.nju.edu.cn 国内源）
+├── .env                    # git 忽略：真实密钥/部署值（OIDC 凭据、管理员邮箱、Casdoor 地址）
+├── .env.example            # git 跟踪：.env 模板（占位符）
+├── up.sh                   # git 跟踪：统一启动入口
+└── docker-volume/          # git 忽略：MySQL 数据目录（db-data，up 时自动创建）
+```
+
+服务：`mysql`、`elasticsearch`、`execute-migrate-all`、`openmetadata-server`、`ingestion`；镜像默认 `2.0.0` 发行版（可用 `OPENMETADATA_SERVER_IMAGE` / `OPENMETADATA_DB_IMAGE` / `OPENMETADATA_INGESTION_IMAGE` 覆盖）。
+
+### 使用
+
+在仓库根目录执行（`up.sh` 会自动切换到其所在目录并加载 `.env`）：
+
+```bash
+cd ~/OpenMetadata
+./docker/docker-compose-custom/up.sh config   # 校验渲染结果（不启动）
+./docker/docker-compose-custom/up.sh up -d    # 启动
+./docker/docker-compose-custom/up.sh ps       # 查看状态
+./docker/docker-compose-custom/up.sh down     # 停止
+```
+
+等价于 `docker compose -f docker-compose.yml --env-file .env up -d`（在 `docker/docker-compose-custom/` 目录下执行）。
+
+### 密钥卫生
+
+- `docker-compose.yml` 中 OIDC 凭据、管理员邮箱均为 `${VAR}` 引用，**不落盘明文**；`OIDC_CLIENT_SECRET` 用 `${OIDC_CLIENT_SECRET:?}`，缺失即启动报错
+- 真实值放 `.env`（全局 `.gitignore` + 本目录 `.gitignore` 双重忽略）
+- 变更密钥：改 `.env` → `./up.sh up -d`
+
+### 关键配置速查（对应《02-Casdoor与OpenMetadata认证集成.md》）
+
+> 下表标注「.env 可覆盖」的变量同时写入 `.env`（`.env.example` 有占位符模板）；**换域名/IP 只改 `.env`**，compose 内的 `${VAR:-默认}` 为兜底默认值。
+
+| 项 | 变量 | 默认/取值 |
+|---|---|---|
+| 认证方式 | `AUTHENTICATION_PROVIDER` | `custom-oidc` |
+| 授权码流 | `AUTHENTICATION_CLIENT_TYPE` / `AUTHENTICATION_RESPONSE_TYPE` | `confidential` / `code` |
+| 回调地址（.env 可覆盖） | `AUTHENTICATION_CALLBACK_URL` / `OIDC_CALLBACK` | `http://127.0.0.1:8585/callback` |
+| Casdoor 基础地址（.env 可覆盖） | `AUTHENTICATION_AUTHORITY` / `OIDC_SERVER_URL` | `https://casdoor.<your-domain>` |
+| Discovery（.env 可覆盖） | `OIDC_DISCOVERY_URI` | `https://casdoor.<your-domain>/.well-known/openid-configuration` |
+| JWKS（.env 可覆盖） | `AUTHENTICATION_PUBLIC_KEYS` | `["http://127.0.0.1:8585/api/v1/system/config/jwks"]` |
+| 管理员 | `AUTHORIZER_ADMIN_EMAILS` | `.env` 填写（默认 `[]`） |
+| 自助开户 | `AUTHENTICATION_ENABLE_SELF_SIGNUP` | `true` |
+| 域名白名单 | `AUTHORIZER_ALLOWED_REGISTRATION_DOMAIN` | 当前 `["all"]`；生产建议收窄为公司域 |
+
+> ⚠️ 服务端会把认证配置持久化到数据库（`openmetadata_settings`，configType=`authenticationConfiguration`），**优先于环境变量**；改 `.env` 不生效时，在 UI「设置 → SSO 配置」同步修改或清理该表记录。
 

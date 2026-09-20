@@ -1,0 +1,4 @@
+# 本目录局部忽略规则
+.env
+.env.*.local
+docker-volume/
