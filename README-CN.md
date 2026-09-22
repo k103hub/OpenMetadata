@@ -132,7 +132,11 @@ cd ~/OpenMetadata
 | JWKS（.env 可覆盖） | `AUTHENTICATION_PUBLIC_KEYS` | `["http://127.0.0.1:8585/api/v1/system/config/jwks"]` |
 | 管理员 | `AUTHORIZER_ADMIN_EMAILS` | `.env` 填写（默认 `[]`） |
 | 自助开户 | `AUTHENTICATION_ENABLE_SELF_SIGNUP` | `true` |
+| 显示名 claim（DB/UI 专属） | `displayNameClaim` | `displayName` |
+| 邮箱 claim / email-first 流（DB/UI 专属） | `emailClaim` | `email` |
 | 域名白名单 | `AUTHORIZER_ALLOWED_REGISTRATION_DOMAIN` | 当前 `["all"]`；生产建议收窄为公司域 |
 
 > ⚠️ 服务端会把认证配置持久化到数据库（`openmetadata_settings`，configType=`authenticationConfiguration`），**优先于环境变量**；改 `.env` 不生效时，在 UI「设置 → SSO 配置」同步修改或清理该表记录。
+>
+> `emailClaim` / `displayNameClaim` 两个字段**无对应 `.env` 变量**，仅存在于 DB 或 UI「设置 → SSO 配置」。当 IdP 的 id_token 中 `name` claim 为**账号名**、`displayName` claim 为**显示名**时（如 Casdoor 默认 TokenFormat=JWT），应配置 `displayNameClaim=displayName` 并配套设置 `emailClaim=email`（开启 email-first 流）；否则 OM 按 `name` 优先的提取顺序，会把用户显示名同步成账号名。
 
